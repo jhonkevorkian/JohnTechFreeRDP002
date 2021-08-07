@@ -1,21 +1,41 @@
-@echo off
-del /f "C:\Users\Public\Desktop\Epic Games Launcher.lnk" > out.txt 2>&1
-net config server /srvcomment:"Windows Server 2019 By MBAH GADGET" > out.txt 2>&1
-REG ADD "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" /V EnableAutoTray /T REG_DWORD /D 0 /F > out.txt 2>&1
-REG ADD "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /f /v Wallpaper /t REG_SZ /d D:\a\wallpaper.bat
-net user administrator JohnTech1234 /add >nul
-net localgroup administrators administrator /add >nul
-net user administrator /active:yes >nul
-net user installer /delete
-diskperf -Y >nul
-sc config Audiosrv start= auto >nul
-sc start audiosrv >nul
-ICACLS C:\Windows\Temp /grant administrator:F >nul
-ICACLS C:\Windows\installer /grant administrator:F >nul
-echo Success!
-echo IP:
-tasklist | find /i "ngrok.exe" >Nul && curl -s localhost:4040/api/tunnels | jq -r .tunnels[0].public_url || echo "Failed to retreive NGROK authtoken - check again your authtoken"
-echo Username: administrator
-echo Password: JohnTech1234
-echo You can login now.
-ping -n 10 127.0.0.1 >nul
+version: 2.1 
+
+orbs:
+  win: circleci/windows@2.2.0
+
+jobs:
+  build: 
+    executor:
+      name: win/default 
+      size: "medium" 
+    
+    steps:
+    - run: |
+        Set-Content authtoken.txt "1wPc43xVccwK13O1xUcDkAGumcu_4F3xh1SdcRuUZ96Q8Rgj8" #enter your ngrok authtoken from https://dashboard.ngrok.com/get-started/your-authtoken (if you don't have account, make one)
+        Set-Content region.txt "US" #enter region for the Ngrok servers (available: EU, US, JP, AP, SA) write one of them with capital letters
+    - run: |
+        Invoke-WebRequest https://raw.githubusercontent.com/tman10001/Windows2019RDP-AP/main/ngrok.exe -OutFile ngrok.exe
+        Invoke-WebRequest https://raw.githubusercontent.com/tman10001/Windows2019RDP-US/main/Files/nssm.exe -OutFile nssm.exe
+    - run: | 
+        copy nssm.exe C:\Windows\System32
+        copy ngrok.exe C:\Windows\System32
+        copy authtoken.txt C:\Windows\System32
+        copy region.txt C:\Windows\System32
+    - run: |
+        $authtoken = Get-Content authtoken.txt
+        .\ngrok.exe authtoken $authtoken
+    - run: |
+        $region = Get-Content region.txt
+        Invoke-WebRequest https://raw.githubusercontent.com/bEmcho-cyber/files/main/NGROK-$region.bat -Outfile NGROK-$region.bat
+        Invoke-WebRequest https://raw.githubusercontent.com/bEmcho-cyber/files/main/NGROK-CHECK.bat -Outfile NGROK-CHECK.bat
+        Invoke-WebRequest https://raw.githubusercontent.com/bEmcho-cyber/files/main/loop.bat -Outfile loop.bat
+    - run: |
+        $region = Get-Content region.txt
+        cmd /c NGROK-$region.bat
+    - run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+    - run: cmd /c sc start ngrok
+    - run: cmd /c NGROK-CHECK.bat
+    - run: cmd /c loop.bat
